@@ -20,7 +20,6 @@ import sys
 import optparse
 import ConfigParser
 import shutil
-import glob
 import os
 import time
 import math
@@ -144,6 +143,7 @@ def main(args):
             verbose = False,
             quiet = False,
             check = False,
+            fix = False,
             dryrun = False,
             stat = False,
             delete_first = [],
@@ -157,7 +157,8 @@ def main(args):
     parser.add_option('-D', '--delete-first', action='append', dest='delete_first', help='push files matching this REGEX to the top of the deletion queue', metavar='REGEX')
     parser.add_option('-v', '--verbose', action='store_true', dest='verbose', help='be more verbose, a must when testing something out')
     parser.add_option('-q', '--quiet', action='store_true', dest='quiet', help='only output warnings')
-    parser.add_option('--check', action='store_true', dest='check', help='report .trashinfo files without a real file')
+    parser.add_option('--check', action='store_true', dest='check', help='report broken (stale or missing) .trashinfo files')
+    parser.add_option('--fix', action='store_true', dest='fix', help='fix broken (stale or missing) .trashinfo files')
     parser.add_option('--dry-run', action='store_true', dest='dryrun', help='just list what would have been done')
     parser.add_option('--stat', action='store_true', dest='stat', help='show the number, and total size of files involved')
     parser.add_option('-V', '--version', action='store_true', dest='version', help='show version and exit')
@@ -235,18 +236,45 @@ def main(args):
     if options.delete:
         deleted_target = options.delete * 1024 * 1024
 
+    # Look for (and optionally, write) missing .trashinfo files
+    if options.check or options.fix:
+        trash_files_path = os.path.abspath(os.path.join(os.path.join(trash_info_path, '..'), 'files'))
+        for file_name in os.listdir(trash_files_path):
+            info_file = os.path.join(trash_info_path, file_name) + '.trashinfo'
+            if not os.path.exists(info_file):
+                if options.check:
+                    logging.warning('%s has no trashinfo associated with it', file_name)
+                if options.fix:
+                    logging.log(VERBOSE,'%s missing %s', ['Writing','Would write'][int(options.dryrun)], info_file)
+                    if not options.dryrun:
+                        trashinfo = ConfigParser.RawConfigParser()
+                        trashinfo.add_section('Trash Info')
+                        trashinfo.set('Trash Info', 'DeletionDate', time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime()))
+                        trashinfo.set('Trash Info', 'Path', '/') # This is actually unknown, perhaps user's home is a better choice
+                        with open(info_file, 'wb') as f:
+                            trashinfo.write(f)
+
     #Collect file info's
     files = []
     if True: #Scope protection
-        for file_name in glob.iglob(os.path.join(trash_info_path, '*.trashinfo')):
+        for file_name in os.listdir(trash_info_path):
+            file_name = os.path.join(trash_info_path, file_name)
+            if not file_name.endswith('.trashinfo') or not os.path.isfile(file_name):
+                continue
+
             real_file = real_file_name(file_name)
             file_info = {
                 'trash_info': file_name,
                 'real_file': real_file
                 }
-            if options.check:
-                if not os.path.exists(real_file):
-                    logging.warning('%s has no real file associated with it', file_name)
+            if options.check or options.fix:
+                if not os.path.exists(real_file) and not os.path.islink(real_file):
+                    if options.check:
+                        logging.warning('%s has no real file associated with it', file_name)
+                    if options.fix:
+                        logging.log(VERBOSE,'%s stale trashinfo %s', ['Removing','Would remove'][int(options.dryrun)], file_name)
+                        if not options.dryrun:
+                            os.unlink(file_name)
 
             file_time = trash_info_date(file_name)
             if not file_time:

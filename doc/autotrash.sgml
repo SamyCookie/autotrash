@@ -158,7 +158,14 @@ manpage.1: manpage.sgml
         <term><option>--check</option>
         </term>
         <listitem>
-          <para>Report .trashinfo files that point to a non-existing file. This will only happen with a broken Trashcan. It is left up to the user to actually do something with this information. These files will be removed as soon as the mentioned file would be removed by autotrash.</para>
+          <para>Report .trashinfo files that point to a non-existing file, as well as missing ones. This will only happen with a broken Trashcan. Use --fix to correct the problems reported.</para>
+        </listitem>
+      </varlistentry> 
+      <varlistentry>
+        <term><option>--fix</option>
+        </term>
+        <listitem>
+          <para>Fix broken .trashinfo files, by removing those that point to non-existing files as well as by writing missing ones. This will only happen with a broken Trashcan. This option can be combined with --dry-run.</para>
         </listitem>
       </varlistentry> 
       <varlistentry>
